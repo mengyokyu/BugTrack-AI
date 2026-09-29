@@ -1,0 +1,22 @@
+# Viva quick answers
+
+- **Git:** version control; feature branches isolate work and pull requests protect main.
+- **GitHub Actions:** event-driven CI/CD defined as YAML; runners execute repeatable jobs.
+- **CI/CD:** automated verification, packaging, and delivery; deployment is delegated to Argo CD.
+- **Docker:** image is immutable packaging; container is a running instance.
+- **Dockerfile:** uses slim Python, installs dependencies, copies code, and runs non-root.
+- **Kubernetes Pod:** smallest deployable unit; a Deployment maintains replicas.
+- **Service:** stable network endpoint; its selector enables blue-green switching.
+- **ConfigMap vs Secret:** non-sensitive configuration vs sensitive values.
+- **PersistentVolume:** storage independent from a pod lifecycle.
+- **Scaling:** replicas increase capacity; readiness probes protect traffic.
+- **Rollback:** `kubectl rollout undo` restores a prior Deployment revision.
+- **Ansible:** idempotent host configuration and deployment automation.
+- **Terraform:** declarative, reproducible infrastructure using a reusable module.
+- **Prometheus/Grafana:** scrape time-series metrics and visualize them.
+- **Fluentd/Elasticsearch/Kibana:** collect, index, and search centralized logs.
+- **SonarQube/Trivy:** static code quality and container vulnerability scanning.
+- **RBAC:** least-privilege Kubernetes authorization.
+- **Blue-green:** two versions exist; a Service selector changes active traffic.
+- **GitOps/Argo CD:** Git is desired state; Argo CD reconciles the cluster.
+- **Why no Jenkins:** the assignment's Jenkins role is fulfilled by GitHub Actions, avoiding a separate controller while preserving the same stages and credential protections.
