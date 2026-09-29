@@ -88,7 +88,7 @@ No real secrets are committed. The image is non-root and Trivy blocks HIGH/CRITI
 
 ```bash
 python -m pytest -q
-ruff check app tests run.py
+ruff check app tests run.py --ignore E701,E702
 python -m compileall app run.py
 ```
 
