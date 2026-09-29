@@ -1,0 +1,5 @@
+# CI policy: fail on HIGH or CRITICAL unfixed vulnerabilities.
+severity:
+  - CRITICAL
+  - HIGH
+ignore-unfixed: true
