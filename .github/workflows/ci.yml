@@ -25,7 +25,7 @@ jobs:
       - name: Lint
         run: ruff check app tests run.py --ignore E701,E702
       - name: Unit tests
-        run: pytest -q --cov=app --cov-report=term-missing
+        run: python -m pytest -q --cov=app --cov-report=term-missing
       - name: SonarQube analysis
         if: env.SONAR_TOKEN != ''
         uses: SonarSource/sonarqube-scan-action@v5
