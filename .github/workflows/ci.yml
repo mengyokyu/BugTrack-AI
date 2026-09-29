@@ -1,0 +1,77 @@
+name: BugTrack AI CI/CD
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/bugtrack-ai
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Lint
+        run: ruff check app tests run.py --ignore E701,E702
+      - name: Unit tests
+        run: pytest -q --cov=app --cov-report=term-missing
+      - name: SonarQube analysis
+        if: ${{ secrets.SONAR_TOKEN != '' }}
+        uses: SonarSource/sonarqube-scan-action@v5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+
+  image:
+    needs: verify
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Log in to Docker Hub
+        if: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Build image
+        run: docker build --tag bugtrack-ai:${{ github.sha }} .
+      - name: Trivy vulnerability scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: bugtrack-ai:${{ github.sha }}
+          format: table
+          severity: CRITICAL,HIGH
+          exit-code: '1'
+          ignore-unfixed: true
+      - name: Tag and push image
+        if: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
+        run: |
+          docker tag bugtrack-ai:${{ github.sha }} $IMAGE_NAME:${{ github.sha }}
+          docker tag bugtrack-ai:${{ github.sha }} $IMAGE_NAME:latest
+          docker push $IMAGE_NAME:${{ github.sha }}
+          docker push $IMAGE_NAME:latest
+      - name: Update GitOps image tag
+        if: github.ref == 'refs/heads/main' && secrets.DOCKERHUB_USERNAME != ''
+        run: |
+          sed -i "s#newTag:.*#newTag: ${{ github.sha }}#" gitops/overlays/blue/kustomization.yaml
+          sed -i "s#newTag:.*#newTag: ${{ github.sha }}#" gitops/overlays/green/kustomization.yaml
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add gitops/overlays
+          git commit -m "gitops: update image to ${{ github.sha }}" || true
+          git push
