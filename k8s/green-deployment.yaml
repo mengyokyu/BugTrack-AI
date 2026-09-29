@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: bugtrack-green, namespace: bugtrack, labels: {app: bugtrack, version: green}}
+spec:
+  replicas: 2
+  strategy: {type: RollingUpdate}
+  selector: {matchLabels: {app: bugtrack, version: green}}
+  template:
+    metadata: {labels: {app: bugtrack, version: green}}
+    spec:
+      serviceAccountName: bugtrack
+      containers:
+      - name: app
+        image: ghcr.io/example/bugtrack-ai:latest
+        ports: [{containerPort: 5000}]
+        envFrom: [{configMapRef: {name: bugtrack-config}}, {secretRef: {name: bugtrack-secrets}}]
+        readinessProbe: {httpGet: {path: /health, port: 5000}, initialDelaySeconds: 10}
+        livenessProbe: {httpGet: {path: /health, port: 5000}, initialDelaySeconds: 20}
+        securityContext: {runAsNonRoot: true, readOnlyRootFilesystem: false, capabilities: {drop: [ALL]}}

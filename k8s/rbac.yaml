@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata: {name: bugtrack, namespace: bugtrack}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata: {name: bugtrack-read, namespace: bugtrack}
+rules: [{apiGroups: [""], resources: [configmaps, secrets], verbs: [get, list]}]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: {name: bugtrack-read, namespace: bugtrack}
+subjects: [{kind: ServiceAccount, name: bugtrack, namespace: bugtrack}]
+roleRef: {kind: Role, name: bugtrack-read, apiGroup: rbac.authorization.k8s.io}

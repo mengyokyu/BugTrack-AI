@@ -1,0 +1,4 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: bugtrack
+resources: [namespace.yaml, configmap.yaml, secret.example.yaml, postgres-pv.yaml, postgres.yaml, blue-deployment.yaml, green-deployment.yaml, service.yaml, rbac.yaml, ingress.yaml]

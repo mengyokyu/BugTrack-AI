@@ -1,0 +1,5 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata: {name: bugtrack, namespace: bugtrack}
+spec:
+  rules: [{host: bugtrack.local, http: {paths: [{path: /, pathType: Prefix, backend: {service: {name: bugtrack, port: {number: 80}}}}]}}]
