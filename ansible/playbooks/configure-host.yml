@@ -1,0 +1,8 @@
+- hosts: local
+  become: true
+  tasks:
+    - name: Create project directories
+      file: {path: "{{ item }}", state: directory, mode: '0755'}
+      loop: [/opt/bugtrack-ai, /opt/bugtrack-ai/manifests]
+    - name: Configure local host entry
+      lineinfile: {path: /etc/hosts, line: '127.0.0.1 bugtrack.local', state: present}

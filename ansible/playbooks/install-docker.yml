@@ -1,0 +1,9 @@
+- hosts: local
+  become: true
+  tasks:
+    - name: Install Docker prerequisites
+      apt: {name: [docker.io, docker-compose-plugin], state: present, update_cache: true}
+    - name: Enable Docker
+      service: {name: docker, state: started, enabled: true}
+    - name: Allow current user to use Docker
+      user: {name: "{{ ansible_user_id }}", groups: docker, append: true}

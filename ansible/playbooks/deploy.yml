@@ -1,0 +1,5 @@
+- hosts: local
+  tasks:
+    - name: Apply Kubernetes resources
+      command: kubectl apply -k k8s/
+      args: {chdir: "{{ playbook_dir }}/../.."}
