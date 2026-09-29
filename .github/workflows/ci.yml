@@ -51,7 +51,7 @@ jobs:
       - name: Build image
         run: docker build --tag bugtrack-ai:${{ github.sha }} .
       - name: Trivy vulnerability scan
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: bugtrack-ai:${{ github.sha }}
           format: table
