@@ -1,12 +1,17 @@
 import logging
+import os
 import time
 from flask import Flask, jsonify, request
 from .config import Config
 from .extensions import db
 from .metrics import REQUESTS, LATENCY
 
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 def create_app(test_config=None):
-    app = Flask(__name__, instance_relative_config=True)
+    app = Flask(__name__, instance_relative_config=True,
+                template_folder=os.path.join(BASE_DIR, "templates"),
+                static_folder=os.path.join(BASE_DIR, "static"))
     app.config.from_object(Config)
     if test_config: app.config.update(test_config)
     db.init_app(app)
