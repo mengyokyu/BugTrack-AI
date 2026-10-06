@@ -3,8 +3,18 @@ name: BugTrack AI CI/CD
 on:
   push:
     branches: [main, develop]
+    paths-ignore: ["gitops/overlays/**"]
   pull_request:
     branches: [main, develop]
+    paths-ignore: ["gitops/overlays/**"]
+
+concurrency:
+  group: bugtrack-ai-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   verify:
@@ -12,6 +22,19 @@ jobs:
     env:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
       SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: bugtrack
+          POSTGRES_USER: bugtrack
+          POSTGRES_PASSWORD: ci-password
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U bugtrack -d bugtrack"
+          --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -21,11 +44,34 @@ jobs:
           python-version: '3.12'
           cache: pip
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements.txt pip-audit
       - name: Lint
         run: ruff check app tests run.py --ignore E701,E702
-      - name: Unit tests
+      - name: Unit and security tests
+        env:
+          DATABASE_URL: postgresql+psycopg2://bugtrack:ci-password@localhost:5432/bugtrack
+          SECRET_KEY: ci-only-secret
         run: python -m pytest -q --cov=app --cov-report=term-missing
+      - name: Migration smoke test
+        env:
+          DATABASE_URL: postgresql+psycopg2://bugtrack:ci-password@localhost:5432/bugtrack
+          SECRET_KEY: ci-only-secret
+        run: flask --app run.py db upgrade
+      - name: Dependency audit
+        run: pip-audit -r requirements.txt
+      - name: Secret detection
+        run: |
+          ! git grep -nE '(^|[^A-Z])(sk-[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{20,}|AKIA[A-Z0-9]{16})' -- ':!migrations'
+      - name: Infrastructure syntax checks
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import yaml
+          for path in list(Path('.').rglob('*.yml')) + list(Path('.').rglob('*.yaml')):
+              with path.open() as stream:
+                  list(yaml.safe_load_all(stream))
+          print('YAML validation passed')
+          PY
       - name: SonarQube analysis
         if: env.SONAR_TOKEN != ''
         uses: SonarSource/sonarqube-scan-action@v5
@@ -33,44 +79,35 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
 
-  image:
+  release:
     needs: verify
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      packages: write
       security-events: write
-    env:
-      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
-      - name: Log in to Docker Hub
-        if: env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != ''
+      - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build image
-        run: docker build --tag bugtrack-ai:${{ github.sha }} .
+        run: docker build --tag $REGISTRY/$IMAGE_NAME:${{ github.sha }} .
       - name: Trivy vulnerability scan
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: bugtrack-ai:${{ github.sha }}
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
           format: table
           severity: CRITICAL,HIGH
           exit-code: '1'
           ignore-unfixed: true
-      - name: Tag and push image
-        if: env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != ''
-        run: |
-          image="$DOCKERHUB_USERNAME/bugtrack-ai"
-          docker tag bugtrack-ai:${{ github.sha }} "$image:${{ github.sha }}"
-          docker tag bugtrack-ai:${{ github.sha }} "$image:latest"
-          docker push "$image:${{ github.sha }}"
-          docker push "$image:latest"
-      - name: Update GitOps image tag
-        if: github.ref == 'refs/heads/main' && env.DOCKERHUB_USERNAME != ''
+      - name: Push immutable image
+        run: docker push $REGISTRY/$IMAGE_NAME:${{ github.sha }}
+      - name: Update GitOps image reference
         run: |
           sed -i "s#newTag:.*#newTag: ${{ github.sha }}#" gitops/overlays/blue/kustomization.yaml
           sed -i "s#newTag:.*#newTag: ${{ github.sha }}#" gitops/overlays/green/kustomization.yaml

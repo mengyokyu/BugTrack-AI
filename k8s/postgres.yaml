@@ -13,7 +13,7 @@ spec:
         env:
         - {name: POSTGRES_DB, value: bugtrack}
         - {name: POSTGRES_USER, value: bugtrack}
-        - {name: POSTGRES_PASSWORD, valueFrom: {secretKeyRef: {name: bugtrack-secrets, key: SECRET_KEY}}}
+        - {name: POSTGRES_PASSWORD, valueFrom: {secretKeyRef: {name: bugtrack-secrets, key: POSTGRES_PASSWORD}}}
         ports: [{containerPort: 5432}]
         volumeMounts: [{name: data, mountPath: /var/lib/postgresql/data}]
       volumes: [{name: data, persistentVolumeClaim: {claimName: postgres-pvc}}]

@@ -19,4 +19,4 @@
 - **RBAC:** least-privilege Kubernetes authorization.
 - **Blue-green:** two versions exist; a Service selector changes active traffic.
 - **GitOps/Argo CD:** Git is desired state; Argo CD reconciles the cluster.
-- **Why no Jenkins:** the assignment's Jenkins role is fulfilled by GitHub Actions, avoiding a separate controller while preserving the same stages and credential protections.
+- **Why GitHub Actions only:** GitHub Actions is the sole CI/CD platform and provides the required verification, release, and credential protections.

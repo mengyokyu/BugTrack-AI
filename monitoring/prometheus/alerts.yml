@@ -1,0 +1,13 @@
+groups:
+  - name: bugtrack-ai
+    rules:
+      - alert: BugTrackApplicationDown
+        expr: bugtrack_application_health == 0
+        for: 5m
+        labels: {severity: critical}
+        annotations: {summary: BugTrack AI application is unhealthy}
+      - alert: BugTrackHighErrorRate
+        expr: sum(rate(bugtrack_http_requests_total{status=~"5.."}[5m])) > 0.1
+        for: 10m
+        labels: {severity: warning}
+        annotations: {summary: BugTrack AI has a high HTTP 5xx rate}
