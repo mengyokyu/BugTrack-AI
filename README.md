@@ -1,95 +1,76 @@
 # BugTrack AI
 
-A deliberately small Flask + PostgreSQL bug tracker built to demonstrate an end-to-end DevOps capstone. **GitHub Actions replaces Jenkins** as the CI/CD engine; Argo CD remains the Kubernetes deployment authority.
+BugTrack AI is a small Flask + PostgreSQL bug-tracking platform with an optional AI analysis feature. It remains a modular monolith: the application is intentionally simple, while GitHub Actions, Docker, Kubernetes, Argo CD, Terraform, Ansible, Prometheus, Grafana, Fluentd, Elasticsearch, Kibana, SonarQube, and Trivy provide the DevOps workflow.
 
 ## Features
 
-Register/login/logout, bug CRUD, status and severity changes, comments, responsive vanilla HTML/CSS/JS UI, REST API, health endpoint, Prometheus metrics, optional LLM analysis, clean error handling, and PostgreSQL support.
+Users can register, log in, log out, create and manage bugs, assign bugs, set severity and priority, describe reproduction details, search/filter/sort/paginate their accessible bugs, add comments, view activity history, organize bugs under owned projects, and request optional AI analysis. Admin users are selected by the `ADMIN_EMAIL` configuration value. Passwords are hashed; protected mutations require a CSRF header; authorization is enforced server-side.
 
 ## Local development
 
 ```bash
 cp .env.example .env
-python3 -m venv .venv && source .venv/bin/activate
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
-pytest -q
+export SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+flask --app run.py db upgrade
+python -m pytest -q
 flask --app run.py run --debug
 ```
 
-The default local database is SQLite. Set `DATABASE_URL` to PostgreSQL for production-like testing. AI is optional: set `AI_API_KEY`, `AI_API_URL`, and `AI_MODEL`; without a key the analysis endpoint returns `503` while the rest of the application works.
+The application defaults to SQLite for a lightweight developer mode. Use PostgreSQL by setting `DATABASE_URL`. The app does not create tables at startup; migrations are applied explicitly with Flask-Migrate. AI is optional and never required by tests or core CRUD.
 
-## Docker
+## Docker Compose
 
 ```bash
 docker compose up --build
-curl http://localhost:5000/health
+curl http://localhost:5000/health/ready
 ```
 
-The image uses a slim Python base, a non-root user, no embedded secrets, and a health check.
+Compose starts PostgreSQL and the app. The container entrypoint runs `flask db upgrade` before Gunicorn. Compose credentials are development-only and must not be reused in production. Use a secret manager and a managed PostgreSQL backup strategy for production.
 
-## GitHub Actions CI/CD
+## GitHub Actions and GHCR
 
-`.github/workflows/ci.yml` runs on pushes and pull requests. It checks out the code, installs dependencies, runs Ruff and pytest/coverage, optionally runs SonarQube, builds the image, scans it with Trivy, pushes a SHA-tagged image when registry secrets exist, and updates GitOps image tags on `main`.
+`.github/workflows/ci.yml` is the only CI/CD workflow. Pull requests and pushes run linting, PostgreSQL-backed tests, migration smoke tests, dependency auditing, secret detection, YAML validation, and optional SonarQube. Pushes to `main` additionally build a non-root image, scan it with Trivy, publish an immutable SHA tag to GHCR, and update both GitOps overlays. `paths-ignore` prevents GitOps image commits from causing a release loop; concurrency cancels stale runs.
 
-Configure these encrypted repository secrets as needed: `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `SONAR_TOKEN`, `SONAR_HOST_URL`, and `AI_API_KEY`. GitHub's built-in `GITHUB_TOKEN` is used for GitOps commits. The workflow does not contain credentials.
+Required repository configuration: `SONAR_TOKEN` and `SONAR_HOST_URL` only when SonarQube is available. GHCR publishing uses the short-lived built-in `GITHUB_TOKEN` with `packages: write`; no registry password is needed. The package is `ghcr.io/mengyokyu/bugtrack-ai`.
 
-## Kubernetes / Minikube
+## Kubernetes and GitOps
+
+Create the runtime Secret out of band; `k8s/secret.example.yaml` is not part of the Kustomize resource chain:
 
 ```bash
 minikube start
+kubectl create namespace bugtrack
+kubectl -n bugtrack create secret generic bugtrack-secrets \
+  --from-literal=DATABASE_URL='postgresql+psycopg2://bugtrack:<password>@postgres:5432/bugtrack' \
+  --from-literal=SECRET_KEY='<random-value>' \
+  --from-literal=AI_API_KEY=''
 kubectl apply -k k8s/
-kubectl -n bugtrack get pods,svc,pvc
-kubectl -n bugtrack scale deployment/bugtrack-blue --replicas=3
-kubectl -n bugtrack rollout status deployment/bugtrack-blue
-kubectl -n bugtrack rollout history deployment/bugtrack-blue
-kubectl -n bugtrack rollout undo deployment/bugtrack-blue
-./k8s/switch-blue-green.sh green
-./k8s/switch-blue-green.sh blue
 ```
 
-Create real secrets locally from the example and do not commit them:
+The manifests include blue/green Deployments, rolling-update controls, startup/readiness/liveness probes, resource requests and limits, HPA, NetworkPolicy, RBAC, ConfigMap, and persistent PostgreSQL storage. For GitOps, apply `gitops/argocd-application.yaml` after replacing the image tag through the release workflow. Argo CD is the deployment authority; CI only updates Git.
 
-```bash
-kubectl apply -f k8s/secret.example.yaml
-```
+For promotion, update the active overlay in Git and let Argo CD sync. The existing `k8s/switch-blue-green.sh` is a local demonstration helper only; it is not the GitOps promotion mechanism and should not be used against an Argo-managed production Service.
 
-Blue and green deployments share the application image. The Service selector switches traffic. Readiness/liveness probes support rolling updates and rollback.
+## Ansible and Terraform
 
-## Ansible
+Ansible playbooks bootstrap a Linux development host, install Docker and Minikube prerequisites, create directories, and apply manifests. They contain no production credentials. Terraform is limited to the explicitly declared local Kubernetes provider/module scope; it must not independently manage resources owned by Argo CD. Validate with `terraform fmt -check`, `terraform init`, `terraform validate`, and `terraform plan` when a kubeconfig is available.
 
-Playbooks in `ansible/playbooks/` install Docker, install kubectl/Minikube, configure a local host, and apply manifests. Validate with `ansible-playbook --syntax-check ansible/playbooks/*.yml`.
+## Observability and security
 
-## Terraform
-
-The Kubernetes provider and reusable `terraform/modules/kubernetes` module provision a namespace, ConfigMap, and Service without cloud resources:
-
-```bash
-cd terraform
-terraform init
-terraform validate
-terraform plan
-terraform apply
-terraform destroy
-```
-
-## Monitoring and logging
-
-`/metrics` exposes request count, latency, health, and status labels. Prometheus configuration is in `monitoring/prometheus/prometheus.yml`; Grafana dashboard JSON is in `monitoring/grafana/dashboard.json`. Fluentd tails Kubernetes container logs and forwards them to Elasticsearch; Kibana is the search/visualization layer.
-
-## GitOps with Argo CD
-
-`gitops/` contains Kustomize base and blue/green overlays. Apply an Argo CD Application pointing at this repository and `gitops/overlays/blue` (or green). Argo CD detects image-tag commits and synchronizes Kubernetes. Git is the desired state; GitHub Actions never directly deploys application resources.
-
-## Security
-
-No real secrets are committed. The image is non-root and Trivy blocks HIGH/CRITICAL findings. Kubernetes uses a ServiceAccount, Role, RoleBinding, Secret, dropped capabilities, and probes. SonarQube settings are in `security/sonar-project.properties`.
+`/health/live` checks process liveness, `/health/ready` checks database readiness, and `/metrics` exposes request, latency, error, health, database, and bug-lifecycle metrics. Prometheus rules and a Grafana dashboard are under `monitoring/`. Application logs go to stdout with request IDs; Fluentd can forward Kubernetes logs to Elasticsearch for Kibana search. The Docker image runs as non-root, drops Linux capabilities, uses secure response headers, and contains no secrets. Trivy blocks HIGH and CRITICAL findings when the release environment is configured.
 
 ## Validation
 
 ```bash
-python -m pytest -q
+source .venv/bin/activate
 ruff check app tests run.py --ignore E701,E702
-python -m compileall app run.py
+python -m pytest -q --cov=app
+SECRET_KEY=test python -m compileall app run.py
 ```
 
-See [ARCHITECTURE.md](ARCHITECTURE.md), [DEMO.md](DEMO.md), [VIVA.md](VIVA.md), and [docs/report-outline.md](docs/report-outline.md).
+Offline validation is performed when Docker, Kubernetes, Terraform, Ansible, or full logging services are not installed. The final report must distinguish static validation from a real cluster deployment.
+
+See `docs/ARCHITECTURE.md`, `docs/SECURITY.md`, `docs/DEPLOYMENT.md`, and `docs/TROUBLESHOOTING.md` for operational details.

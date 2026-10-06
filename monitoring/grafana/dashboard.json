@@ -1,1 +1,13 @@
-{"title":"BugTrack AI","panels":[{"type":"timeseries","title":"Request rate","targets":[{"expr":"rate(bugtrack_http_requests_total[5m])"}]},{"type":"timeseries","title":"HTTP errors","targets":[{"expr":"sum(rate(bugtrack_http_requests_total{status=~\"5..\"}[5m]))"}]},{"type":"timeseries","title":"Latency","targets":[{"expr":"rate(bugtrack_http_request_latency_seconds_sum[5m])"}]},{"type":"stat","title":"Application health","targets":[{"expr":"bugtrack_application_health"}]}]}
+{
+  "title": "BugTrack AI Operations",
+  "schemaVersion": 39,
+  "panels": [
+    {"type": "timeseries", "title": "Request rate", "targets": [{"expr": "sum(rate(bugtrack_http_requests_total[5m]))"}]},
+    {"type": "timeseries", "title": "HTTP error rate", "targets": [{"expr": "sum(rate(bugtrack_http_requests_total{status=~\"5..\"}[5m]))"}]},
+    {"type": "timeseries", "title": "Latency p95", "targets": [{"expr": "histogram_quantile(0.95, sum(rate(bugtrack_http_request_latency_seconds_bucket[5m])) by (le))"}]},
+    {"type": "stat", "title": "Application health", "targets": [{"expr": "bugtrack_application_health"}]},
+    {"type": "stat", "title": "Database health", "targets": [{"expr": "bugtrack_database_health"}]},
+    {"type": "timeseries", "title": "Container CPU", "targets": [{"expr": "sum(rate(container_cpu_usage_seconds_total{container!=\"\"}[5m])) by (pod)"}]},
+    {"type": "timeseries", "title": "Container memory", "targets": [{"expr": "sum(container_memory_working_set_bytes{container!=\"\"}) by (pod)"}]}
+  ]
+}

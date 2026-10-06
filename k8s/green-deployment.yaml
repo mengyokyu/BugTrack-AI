@@ -3,17 +3,21 @@ kind: Deployment
 metadata: {name: bugtrack-green, namespace: bugtrack, labels: {app: bugtrack, version: green}}
 spec:
   replicas: 2
-  strategy: {type: RollingUpdate}
+  strategy: {type: RollingUpdate, rollingUpdate: {maxUnavailable: 0, maxSurge: 1}}
   selector: {matchLabels: {app: bugtrack, version: green}}
   template:
     metadata: {labels: {app: bugtrack, version: green}}
     spec:
       serviceAccountName: bugtrack
+      securityContext: {runAsNonRoot: true, seccompProfile: {type: RuntimeDefault}}
       containers:
       - name: app
-        image: ghcr.io/example/bugtrack-ai:latest
+        image: ghcr.io/mengyokyu/bugtrack-ai:latest
+        imagePullPolicy: IfNotPresent
         ports: [{containerPort: 5000}]
         envFrom: [{configMapRef: {name: bugtrack-config}}, {secretRef: {name: bugtrack-secrets}}]
-        readinessProbe: {httpGet: {path: /health, port: 5000}, initialDelaySeconds: 10}
-        livenessProbe: {httpGet: {path: /health, port: 5000}, initialDelaySeconds: 20}
-        securityContext: {runAsNonRoot: true, readOnlyRootFilesystem: false, capabilities: {drop: [ALL]}}
+        resources: {requests: {cpu: 100m, memory: 128Mi}, limits: {cpu: 500m, memory: 512Mi}}
+        startupProbe: {httpGet: {path: /health/live, port: 5000}, failureThreshold: 30, periodSeconds: 5}
+        readinessProbe: {httpGet: {path: /health/ready, port: 5000}, periodSeconds: 10}
+        livenessProbe: {httpGet: {path: /health/live, port: 5000}, periodSeconds: 20}
+        securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: false, capabilities: {drop: [ALL]}}

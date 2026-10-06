@@ -6,7 +6,7 @@
 4. Tools Used
 5. Application Design
 6. Git Workflow
-7. GitHub Actions CI/CD (replacing Jenkins)
+7. GitHub Actions CI/CD (using GitHub Actions)
 8. Docker
 9. Kubernetes
 10. Ansible

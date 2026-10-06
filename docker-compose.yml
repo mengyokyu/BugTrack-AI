@@ -16,16 +16,17 @@ services:
     ports: ["5000:5000"]
     environment:
       DATABASE_URL: postgresql+psycopg2://bugtrack:${POSTGRES_PASSWORD:-local-dev-password}@db:5432/bugtrack
-      SECRET_KEY: ${SECRET_KEY:-local-compose-secret}
+      SECRET_KEY: ${SECRET_KEY:-local-development-only-change-me}
+      SESSION_COOKIE_SECURE: "false"
       AI_API_KEY: ${AI_API_KEY:-}
       AI_API_URL: ${AI_API_URL:-https://api.openai.com/v1/chat/completions}
     depends_on:
       db:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health/ready')"]
       interval: 30s
       timeout: 5s
-      retries: 3
+      retries: 5
 volumes:
   postgres_data:
